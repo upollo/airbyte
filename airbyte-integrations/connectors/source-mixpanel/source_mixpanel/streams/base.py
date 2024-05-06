@@ -125,7 +125,8 @@ class MixpanelStream(HttpStream, ABC):
             self.logger.debug(f"API responded with `Retry-After` header: {retry_after}")
             return float(retry_after)
 
-        self.retries += 1
+        if self.retries < 3:
+            self.retries += 1
         return 2**self.retries * 60
 
     def should_retry(self, response: requests.Response) -> bool:
