@@ -5,6 +5,7 @@
 from functools import cache
 from typing import Any, Iterable, List, Mapping, MutableMapping, Optional
 
+import pendulum
 import requests
 from airbyte_cdk.models import SyncMode
 from airbyte_cdk.sources.utils.transform import TransformConfig, TypeTransformer
@@ -98,6 +99,14 @@ class Engage(IncrementalMixpanelStream):
         params = {**params, "page_size": self.page_size}
         if next_page_token:
             params.update(next_page_token)
+
+        # filter by last_seen to speed up incremental sync
+        if self.cursor_field == "last_seen":
+            cursor_param = stream_slice.get(self.cursor_field)
+            if cursor_param:
+                timestamp = int(pendulum.parse(cursor_param).timestamp())
+                params["where"] = f'properties["$last_seen"]>=datetime({timestamp})'
+
         return params
 
     def next_page_token(self, response: requests.Response) -> Optional[Mapping[str, Any]]:
