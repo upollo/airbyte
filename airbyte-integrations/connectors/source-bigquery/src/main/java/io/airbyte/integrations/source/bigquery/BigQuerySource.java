@@ -9,8 +9,10 @@ import static io.airbyte.cdk.integrations.source.relationaldb.RelationalDbQueryU
 import static io.airbyte.cdk.integrations.source.relationaldb.RelationalDbQueryUtils.queryTable;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.cloud.bigquery.Field;
 import com.google.cloud.bigquery.QueryParameterValue;
+import com.google.cloud.bigquery.storage.v1.BigQueryReadClient;
 import com.google.cloud.bigquery.StandardSQLTypeName;
 import com.google.cloud.bigquery.Table;
 import com.google.common.collect.ImmutableMap;
@@ -77,6 +79,19 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
     final BigQueryDatabase database = new BigQueryDatabase(sourceConfig.get(CONFIG_PROJECT_ID).asText(), sourceConfig.get(CONFIG_CREDS).asText());
     database.setSourceConfig(sourceConfig);
     database.setDatabaseConfig(toDatabaseConfig(sourceConfig));
+    private BigQueryReadSettings bqReadSettings;
+    
+    if sourceConfig.get(CONFIG_CREDS) == null || sourceConfig.get(CONFIG_CREDS).isEmpty() {
+      bqReadSettings = BigQueryReadSettings.newBuilder().build();
+    }
+    bqReadSettings =
+      BigQueryReadSettings.newBuilder()
+          .setCredentialsProvider(ServiceAccountCredentials.fromStream(
+                        ByteArrayInputStream(jsonCreds.toByteArray(Charsets.UTF_8))
+                    ))
+          .build();
+
+    bqReadClient = BigQueryReadClient.Create(bqReadSettings);
     return database;
   }
 
@@ -168,6 +183,12 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
         schemaName,
         tableName,
         sourceOperations.getQueryParameter(cursorFieldType, cursorInfo.getCursor()));
+
+    filter = String.format("%s > ?", 
+    
+    )
+
+    return StorageQuery.storageQuery(bqReadClient,  getFullyQualifiedTableNameWithQuoting(schemaName, tableName, getQuoteString()), filter, columnNames, null)
   }
 
   @Override
