@@ -161,13 +161,18 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
                                                                final String tableName,
                                                                final CursorInfo cursorInfo,
                                                                final StandardSQLTypeName cursorFieldType) {
-    return queryTableWithParams(database, String.format("SELECT %s FROM %s WHERE %s > ?",
-        RelationalDbQueryUtils.enquoteIdentifierList(columnNames, getQuoteString()),
-        getFullyQualifiedTableNameWithQuoting(schemaName, tableName, getQuoteString()),
-        cursorInfo.getCursorField()),
+    return queryTableWithParams(
+        database,
+        String.format(
+            "SELECT %s FROM %s WHERE %s > ?",
+            enquoteIdentifierList(columnNames, getQuoteString()),
+            getFullyQualifiedTableNameWithQuoting(schemaName, tableName, getQuoteString()),
+            cursorInfo.getCursorField()
+        ),
         schemaName,
         tableName,
-        sourceOperations.getQueryParameter(cursorFieldType, cursorInfo.getCursor()));
+        sourceOperations.getQueryParameter(cursorFieldType, cursorInfo.getCursor())
+    );
   }
 
   @Override
@@ -178,10 +183,16 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
                                                                   final SyncMode syncMode,
                                                                   final Optional<String> cursorField) {
     LOGGER.info("Queueing query for table: {}", tableName);
-    return queryTable(database, String.format("SELECT %s FROM %s",
-        enquoteIdentifierList(columnNames, getQuoteString()),
-        getFullyQualifiedTableNameWithQuoting(schemaName, tableName, getQuoteString())),
-        tableName, schemaName);
+    return queryTableWithParams(
+        database,
+        String.format(
+            "SELECT %s FROM %s",
+            enquoteIdentifierList(columnNames, getQuoteString()),
+            getFullyQualifiedTableNameWithQuoting(schemaName, tableName, getQuoteString())
+        ),
+        tableName,
+        schemaName
+    );
   }
 
   @Override
