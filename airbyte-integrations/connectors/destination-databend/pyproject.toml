@@ -19,7 +19,7 @@ include = "destination_databend"
 python = "^3.9,<3.12"
 databend-sqlalchemy = "==0.1.6"
 airbyte-cdk = "==0.68.1"
-requests = "==2.31.0"
+requests = "==2.32.2"
 
 [tool.poetry.scripts]
 destination-databend = "destination_databend.run:run"
