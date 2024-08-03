@@ -1,16 +1,24 @@
 package io.airbyte.integrations.source.bigquery;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.api.gax.rpc.ServerStream;
 import com.google.cloud.bigquery.storage.v1.BigQueryReadClient;
 import com.google.cloud.bigquery.storage.v1.CreateReadSessionRequest;
 import com.google.cloud.bigquery.storage.v1.DataFormat;
 import com.google.cloud.bigquery.storage.v1.ReadSession;
+import com.google.cloud.bigquery.storage.v1.ReadRowsRequest;
+import com.google.cloud.bigquery.storage.v1.ReadRowsResponse;
+import com.google.common.base.Preconditions;
 import com.google.protobuf.Timestamp;
 import io.airbyte.commons.util.AutoCloseableIterator;
-import java.io.IOException;
-import java.util.List;
 
-public class BigQueryStorageIterator implements AutoCloseableIterator<JsonNode> {
+import java.io.IOException;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
+
+/* Iterator to read from BigQueryStorage. Not thread-safe. */
+class BigQueryStorageIterator implements AutoCloseableIterator<JsonNode> {
 
     /**
      * Executes a storage query and returns an iterator over the results.
@@ -48,31 +56,71 @@ public class BigQueryStorageIterator implements AutoCloseableIterator<JsonNode> 
         }
 
         ReadSession session = client.createReadSession(req.build());
-        return new BigQueryStorageIterator(client, session);
+        ServerStream<ReadRowsResponse> stream = client.readRowsCallable().call(
+            ReadRowsRequest.newBuilder()
+                .setReadStream(session.getStreams(0).getName())
+                .build()
+        );
+        return new BigQueryStorageIterator(
+            new ArrowParser(session.getArrowSchema()),
+            stream
+        );
     }
 
-    private final BigQueryReadClient client;
-    private final ReadSession session;
+    private final ArrowParser parser;
+    private final ServerStream<ReadRowsResponse> stream;
 
-    public BigQueryStorageIterator(
-        BigQueryReadClient client,
-        ReadSession session
-    ) {
-        this.client = client;
-        this.session = session;
+    private Iterator<JsonNode> currentBatch;
+    private boolean isClosed = false;
+
+    /** Iterator which uses the given parser to produce JsonNodes from reading the given stream. */
+    private BigQueryStorageIterator(
+        ArrowParser parser,
+        ServerStream<ReadRowsResponse> stream
+    ) throws IOException {
+        this.parser = parser;
+        this.stream = stream;
+
+        this.currentBatch = loadNextBatch();
+    }
+
+    /** Loads and returns the next batch of records, or none remain. */
+    private Iterator<JsonNode> loadNextBatch() throws IOException {
+        Iterator<ReadRowsResponse> it = this.stream.iterator();
+        if (it.hasNext()) {
+            return parser.processRows(it.next().getArrowRecordBatch());
+        } else {
+            return null;
+        }
     }
 
     @Override public boolean hasNext() {
-        // TODO: implement
-        return false;
+        if (this.currentBatch == null) {
+            return false;
+        }
+        if (!this.currentBatch.hasNext()) {
+            try {
+                this.currentBatch = loadNextBatch();
+            } catch (IOException ioe) {
+                throw new RuntimeException("Error processing rows", ioe);
+            }
+        }
+        return this.currentBatch != null && this.currentBatch.hasNext();
     }
 
     @Override public JsonNode next() {
-        // TODO: implement
-        return null;
+        if (!hasNext()) {
+            throw new NoSuchElementException();
+        }
+        return this.currentBatch.next();
     }
 
     @Override public void close() {
-        // TODO: implement
+        if (!this.isClosed) {
+            this.parser.close();
+            this.stream.cancel();
+            this.isClosed = true;
+            this.currentBatch = null;
+        }
     }
 }
