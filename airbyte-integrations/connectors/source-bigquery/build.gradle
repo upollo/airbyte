@@ -29,6 +29,8 @@ application {
 dependencies {
     implementation 'com.google.cloud:google-cloud-bigquery:2.23.2'
     implementation 'com.google.cloud:google-cloud-bigquerystorage:3.8.0'
+    implementation 'org.apache.arrow:arrow-memory-core:17.0.0'
+    implementation 'org.apache.arrow:arrow-vector:17.0.0'
     implementation 'org.apache.commons:commons-lang3:3.11'
 
     testImplementation 'org.apache.commons:commons-lang3:3.11'
