@@ -161,18 +161,9 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
                                                                final String tableName,
                                                                final CursorInfo cursorInfo,
                                                                final StandardSQLTypeName cursorFieldType) {
-    return queryTableWithParams(
-        database,
-        String.format(
-            "SELECT %s FROM %s WHERE %s > ?",
-            enquoteIdentifierList(columnNames, getQuoteString()),
-            getFullyQualifiedTableNameWithQuoting(schemaName, tableName, getQuoteString()),
-            cursorInfo.getCursorField()
-        ),
-        schemaName,
-        tableName,
-        sourceOperations.getQueryParameter(cursorFieldType, cursorInfo.getCursor())
-    );
+    // sourceOperations.getQueryParameter(cursorFieldType, cursorInfo.getCursor());
+    String filter = String.format("%s > %s", cursorInfo.getCursorField(), cursorInfo.getCursor());
+    return queryStorageApi(schemaName, tableName, filter, columnNames);
   }
 
   @Override
@@ -183,21 +174,38 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
                                                                   final SyncMode syncMode,
                                                                   final Optional<String> cursorField) {
     LOGGER.info("Queueing query for table: {}", tableName);
-    return queryTableWithParams(
-        database,
-        String.format(
-            "SELECT %s FROM %s",
-            enquoteIdentifierList(columnNames, getQuoteString()),
-            getFullyQualifiedTableNameWithQuoting(schemaName, tableName, getQuoteString())
-        ),
-        tableName,
-        schemaName
-    );
+    return queryStorageApi(schemaName, tableName, "", columnNames);
   }
 
   @Override
   public boolean isCursorType(final StandardSQLTypeName standardSQLTypeName) {
     return true;
+  }
+
+  private AutoCloseableIterator<JsonNode> queryStorageApi(final String schemaName,
+                                                          final String tableName,
+                                                          final String filter,
+                                                          final List<String> columnNames) {
+    String tableSpec = String.format(
+        "projects/%s/datasets/%s/tables/%s",
+        dbConfig.get(CONFIG_PROJECT_ID).asText(),
+        schemaName,
+        tableName
+    );
+    final AirbyteStreamNameNamespacePair airbyteStream = AirbyteStreamUtils.convertFromNameAndNamespace(tableName, schemaName);
+    return AutoCloseableIterators.lazyIterator(() -> {
+      try {
+        return BigQueryStorageIterator.create(
+            null, // TODO: client
+            tableSpec,
+            filter,
+            columnNames,
+            -1
+        );
+      } catch (final Exception e) {
+        throw new RuntimeException(e);
+      }
+    }, airbyteStream);
   }
 
   private AutoCloseableIterator<JsonNode> queryTableWithParams(final BigQueryDatabase database,

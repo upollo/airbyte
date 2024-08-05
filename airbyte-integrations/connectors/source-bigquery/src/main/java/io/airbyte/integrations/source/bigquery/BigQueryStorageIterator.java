@@ -24,7 +24,7 @@ class BigQueryStorageIterator implements AutoCloseableIterator<JsonNode> {
      * Executes a storage query and returns an iterator over the results.
      *
      * @param client         The BigQueryReadClient to use for the query.
-     * @param tableName      The fully qualified table name.
+     * @param tableSpec      The fully qualified table name: projects/.../datasets/.../tables/...
      * @param filter         The row restriction filter.
      * @param columnNames    The column names to select.
      * @param snapshotMillis Optional snapshot time in milliseconds, or -1.
@@ -33,18 +33,18 @@ class BigQueryStorageIterator implements AutoCloseableIterator<JsonNode> {
      */
     public static AutoCloseableIterator<JsonNode> create(
         BigQueryReadClient client,
-        String tableName,
+        String tableSpec,
         String filter,
         Iterable<String> columnNames,
         int snapshotMs
     ) throws IOException {
-        String projectId = tableName.split("/")[1];
+        String projectId = tableSpec.split("/")[1];
 
         CreateReadSessionRequest.Builder req = CreateReadSessionRequest.newBuilder()
             .setParent(String.format("projects/%s", projectId))
             .setMaxStreamCount(1);
         req.getReadSessionBuilder()
-            .setTable(tableName)
+            .setTable(tableSpec)
             .setDataFormat(DataFormat.ARROW);
         req.getReadSessionBuilder().getReadOptionsBuilder()
             .setRowRestriction(filter)
@@ -61,10 +61,8 @@ class BigQueryStorageIterator implements AutoCloseableIterator<JsonNode> {
                 .setReadStream(session.getStreams(0).getName())
                 .build()
         );
-        return new BigQueryStorageIterator(
-            new ArrowParser(session.getArrowSchema(), ArrowAllocatorSingleton.getInstance()),
-            stream
-        );
+        parser = new ArrowParser(session.getArrowSchema(), ArrowAllocatorSingleton.getInstance());
+        return new BigQueryStorageIterator(parser, stream);
     }
 
     private final ArrowParser parser;
