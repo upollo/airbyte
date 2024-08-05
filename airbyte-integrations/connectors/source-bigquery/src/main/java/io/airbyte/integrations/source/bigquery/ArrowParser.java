@@ -5,6 +5,7 @@ import static org.apache.arrow.vector.ipc.message.MessageSerializer.deserializeS
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.cloud.bigquery.storage.v1.ArrowRecordBatch;
 import com.google.cloud.bigquery.storage.v1.ArrowSchema;
 import com.google.protobuf.ByteString;
@@ -12,6 +13,7 @@ import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorLoader;
 import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.arrow.vector.ipc.ReadChannel;
 import org.apache.arrow.vector.util.ByteArrayReadableSeekableByteChannel;
@@ -19,6 +21,7 @@ import org.apache.arrow.vector.util.ByteArrayReadableSeekableByteChannel;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 // A parser intended for one thread to read through multiple batches of Arrow data in sequence,
 // returning each row as json.
@@ -40,7 +43,13 @@ class ArrowParser implements AutoCloseable {
     public ArrowParser(ArrowSchema arrowSchema, BufferAllocator allocator) {
         this.allocator = allocator;
 
-        Schema schema = deserializeSchema(byteStringReader(arrowSchema.getSerializedSchema()));
+        Schema schema;
+        try {
+            schema = deserializeSchema(byteStringReader(arrowSchema.getSerializedSchema()));
+        } catch (IOException ioe) {
+            // This should never happen, since we're reading from bytes already in memory.
+            throw new RuntimeException("Unexpected IOException reading from in memory byte string", ioe);
+        }
         List<FieldVector> vectors = new ArrayList<>();
         for (Field f : schema.getFields()) {
             vectors.add(f.createVector(allocator));
@@ -56,7 +65,7 @@ class ArrowParser implements AutoCloseable {
     public Iterator<JsonNode> processRows(ArrowRecordBatch arrowBatch) throws IOException {
         if (previous != null) {
             previous.invalidate();
-            this.root.clear();
+            root.clear();
         }
 
         org.apache.arrow.vector.ipc.message.ArrowRecordBatch batch = deserializeRecordBatch(
@@ -72,7 +81,7 @@ class ArrowParser implements AutoCloseable {
 
     // Closes the Parser, invalidating the last iterator returned.
     @Override public void close() {
-        if (prvious != null) {
+        if (previous != null) {
             previous.invalidate();
         }
         root.close();
@@ -80,21 +89,36 @@ class ArrowParser implements AutoCloseable {
 
     // Helper for creating an Arrow ReadChannel over a protobuf ByteString.
     private ReadChannel byteStringReader(ByteString bytes) {
-        return new ReadChannel(new ByteArrayReadableSeekableByteChannel(bytes.toByteArray())))
+        return new ReadChannel(new ByteArrayReadableSeekableByteChannel(bytes.toByteArray()));
+    }
+
+    // Returns row i from given VectorSchemaRoot as JSON.
+    private static JsonNode rowToJson(VectorSchemaRoot root, int i) {
+        ObjectNode node = MAPPER.createObjectNode();
+        for (FieldVector fv : root.getFieldVectors()) {
+            Object value = fv.getObject(i);
+            if (value != null) {
+                node.putPOJO(fv.getName(), value);
+            } else {
+                node.putNull(fv.getName());
+            }
+        }
+        return node;
     }
 
     // Iterator over a batch of rows in a VectorSchemaRoot, which returns them parsed to JSON.
     // If data in the root is modified, invalidate() should be called and any further attempts
     // to use the iterator (including calls to hasNext()) will throw IllegalStateException.
-    private static ArrowIterator implements Iterator<JsonNode> {
+    private static class ArrowIterator implements Iterator<JsonNode> {
         private final VectorSchemaRoot root;
 
         private boolean valid;
         private int i;
 
         ArrowIterator(VectorSchemaRoot root) {
-            valid = true;
-            i = 0;
+            this.root = root;
+            this.valid = true;
+            this.i = 0;
         }
 
         @Override public boolean hasNext() {
@@ -104,7 +128,7 @@ class ArrowParser implements AutoCloseable {
 
         @Override public JsonNode next() {
             checkValid();
-            return MAPPER.readTree(root.contentToJSONString(i++));
+            return rowToJson(root, i);
         }
 
         public void invalidate() {

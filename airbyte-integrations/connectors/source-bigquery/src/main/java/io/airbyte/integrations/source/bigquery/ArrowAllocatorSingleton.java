@@ -10,14 +10,14 @@ public class ArrowAllocatorSingleton {
     private static volatile BufferAllocator instance;
 
     public static BufferAllocator getInstance() {
-        if (this.instance == null) {
+        if (instance == null) {
             synchronized (ArrowAllocatorSingleton.class) {
-                if (this.instance == null) {
+                if (instance == null) {
                     instance = new RootAllocator(MAX_ALLOCATION_SIZE);
                 }
             }
         }
-        return this.instance;
+        return instance;
     }
 
     private ArrowAllocatorSingleton() {}

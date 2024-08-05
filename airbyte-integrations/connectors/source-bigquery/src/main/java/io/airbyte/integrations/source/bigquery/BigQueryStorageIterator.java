@@ -86,7 +86,7 @@ class BigQueryStorageIterator implements AutoCloseableIterator<JsonNode> {
 
     /** Loads and returns the next batch of records, or none remain. */
     private Iterator<JsonNode> loadNextBatch() throws IOException {
-        Iterator<ReadRowsResponse> it = this.stream.iterator();
+        Iterator<ReadRowsResponse> it = stream.iterator();
         if (it.hasNext()) {
             return parser.processRows(it.next().getArrowRecordBatch());
         } else {
@@ -95,32 +95,32 @@ class BigQueryStorageIterator implements AutoCloseableIterator<JsonNode> {
     }
 
     @Override public boolean hasNext() {
-        if (this.currentBatch == null) {
+        if (currentBatch == null) {
             return false;
         }
-        if (!this.currentBatch.hasNext()) {
+        if (!currentBatch.hasNext()) {
             try {
-                this.currentBatch = loadNextBatch();
+                currentBatch = loadNextBatch();
             } catch (IOException ioe) {
                 throw new RuntimeException("Error processing rows", ioe);
             }
         }
-        return this.currentBatch != null && this.currentBatch.hasNext();
+        return currentBatch != null && currentBatch.hasNext();
     }
 
     @Override public JsonNode next() {
         if (!hasNext()) {
             throw new NoSuchElementException();
         }
-        return this.currentBatch.next();
+        return currentBatch.next();
     }
 
     @Override public void close() {
-        if (!this.isClosed) {
-            this.parser.close();
-            this.stream.cancel();
-            this.isClosed = true;
-            this.currentBatch = null;
+        if (!isClosed) {
+            parser.close();
+            stream.cancel();
+            isClosed = true;
+            currentBatch = null;
         }
     }
 }
