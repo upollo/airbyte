@@ -61,7 +61,7 @@ class BigQueryStorageIterator implements AutoCloseableIterator<JsonNode> {
                 .setReadStream(session.getStreams(0).getName())
                 .build()
         );
-        parser = new ArrowParser(session.getArrowSchema(), ArrowAllocatorSingleton.getInstance());
+        ArrowParser parser = new ArrowParser(session.getArrowSchema(), ArrowAllocatorSingleton.getInstance());
         return new BigQueryStorageIterator(parser, stream);
     }
 
