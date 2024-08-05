@@ -25,6 +25,8 @@ public class BigQueryStorageDatabase extends BigQueryDatabase {
             GoogleCredentials creds = GoogleCredentials.fromStream(
                 new ByteArrayInputStream(jsonCreds.getBytes(StandardCharsets.UTF_8)));
             settings.setCredentialsProvider(FixedCredentialsProvider.create(creds));
+        } else {
+            throw new RuntimeException("Missing credentials");
         }
         return BigQueryReadClient.create(settings.build());
     }

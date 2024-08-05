@@ -206,7 +206,7 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
             -1
         );
       } catch (final Exception e) {
-        throw new RuntimeException(e);
+        throw new RuntimeException(tableSpec, e);
       }
     }, airbyteStream);
   }

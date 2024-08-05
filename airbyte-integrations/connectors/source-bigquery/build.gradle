@@ -23,13 +23,22 @@ airbyteJavaConnector.addCdkDependencies()
 
 application {
     mainClass = 'io.airbyte.integrations.source.bigquery.BigQuerySource'
-    applicationDefaultJvmArgs = ['-XX:+ExitOnOutOfMemoryError', '-XX:MaxRAMPercentage=75.0']
+    applicationDefaultJvmArgs = [
+      '-XX:+ExitOnOutOfMemoryError',
+      '-XX:MaxRAMPercentage=75.0',
+      '--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED'
+    ]
+}
+
+test {
+    jvmArgs = ['--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED']
 }
 
 dependencies {
     implementation 'com.google.cloud:google-cloud-bigquery:2.23.2'
     implementation 'com.google.cloud:google-cloud-bigquerystorage:3.8.0'
     implementation 'org.apache.arrow:arrow-memory-core:17.0.0'
+    implementation 'org.apache.arrow:arrow-memory-netty:17.0.0'
     implementation 'org.apache.arrow:arrow-vector:17.0.0'
     implementation 'org.apache.commons:commons-lang3:3.11'
 
