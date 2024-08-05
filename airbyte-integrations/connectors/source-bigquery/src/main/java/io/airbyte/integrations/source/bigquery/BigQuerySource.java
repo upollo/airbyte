@@ -15,7 +15,6 @@ import com.google.cloud.bigquery.StandardSQLTypeName;
 import com.google.cloud.bigquery.Table;
 import com.google.common.collect.ImmutableMap;
 import io.airbyte.cdk.db.SqlDatabase;
-import io.airbyte.cdk.db.bigquery.BigQueryDatabase;
 import io.airbyte.cdk.db.bigquery.BigQuerySourceOperations;
 import io.airbyte.cdk.integrations.base.IntegrationRunner;
 import io.airbyte.cdk.integrations.base.Source;
@@ -44,7 +43,7 @@ import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQueryDatabase> implements Source {
+public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQueryStorageDatabase> implements Source {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(BigQuerySource.class);
   private static final String QUOTE = "`";
@@ -72,17 +71,19 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
   }
 
   @Override
-  protected BigQueryDatabase createDatabase(final JsonNode sourceConfig) {
+  protected BigQueryStorageDatabase createDatabase(final JsonNode sourceConfig) {
     dbConfig = Jsons.clone(sourceConfig);
-    final BigQueryDatabase database = new BigQueryDatabase(sourceConfig.get(CONFIG_PROJECT_ID).asText(), sourceConfig.get(CONFIG_CREDS).asText());
+    final BigQueryStorageDatabase database = new BigQueryStorageDatabase(
+      sourceConfig.get(CONFIG_PROJECT_ID).asText(),
+      sourceConfig.get(CONFIG_CREDS).asText());
     database.setSourceConfig(sourceConfig);
     database.setDatabaseConfig(toDatabaseConfig(sourceConfig));
     return database;
   }
 
   @Override
-  public List<CheckedConsumer<BigQueryDatabase, Exception>> getCheckOperations(final JsonNode config) {
-    final List<CheckedConsumer<BigQueryDatabase, Exception>> checkList = new ArrayList<>();
+  public List<CheckedConsumer<BigQueryStorageDatabase, Exception>> getCheckOperations(final JsonNode config) {
+    final List<CheckedConsumer<BigQueryStorageDatabase, Exception>> checkList = new ArrayList<>();
     checkList.add(database -> {
       if (database.query("select 1").count() < 1)
         throw new Exception("Unable to execute any query on the source!");
@@ -114,12 +115,12 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
   }
 
   @Override
-  protected List<TableInfo<CommonField<StandardSQLTypeName>>> discoverInternal(final BigQueryDatabase database) throws Exception {
+  protected List<TableInfo<CommonField<StandardSQLTypeName>>> discoverInternal(final BigQueryStorageDatabase database) throws Exception {
     return discoverInternal(database, null);
   }
 
   @Override
-  protected List<TableInfo<CommonField<StandardSQLTypeName>>> discoverInternal(final BigQueryDatabase database, final String schema) {
+  protected List<TableInfo<CommonField<StandardSQLTypeName>>> discoverInternal(final BigQueryStorageDatabase database, final String schema) {
     final String projectId = dbConfig.get(CONFIG_PROJECT_ID).asText();
     final List<Table> tables =
         (isDatasetConfigured(database) ? database.getDatasetTables(getConfigDatasetId(database)) : database.getProjectTables(projectId));
@@ -144,7 +145,7 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
   }
 
   @Override
-  protected Map<String, List<String>> discoverPrimaryKeys(final BigQueryDatabase database,
+  protected Map<String, List<String>> discoverPrimaryKeys(final BigQueryStorageDatabase database,
                                                           final List<TableInfo<CommonField<StandardSQLTypeName>>> tableInfos) {
     return Collections.emptyMap();
   }
@@ -155,26 +156,27 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
   }
 
   @Override
-  public AutoCloseableIterator<JsonNode> queryTableIncremental(final BigQueryDatabase database,
+  public AutoCloseableIterator<JsonNode> queryTableIncremental(final BigQueryStorageDatabase database,
                                                                final List<String> columnNames,
                                                                final String schemaName,
                                                                final String tableName,
                                                                final CursorInfo cursorInfo,
                                                                final StandardSQLTypeName cursorFieldType) {
+    // TODO: Handle more filter types.
     // sourceOperations.getQueryParameter(cursorFieldType, cursorInfo.getCursor());
     String filter = String.format("%s > %s", cursorInfo.getCursorField(), cursorInfo.getCursor());
-    return queryStorageApi(schemaName, tableName, filter, columnNames);
+    return queryStorageApi(database, schemaName, tableName, filter, columnNames);
   }
 
   @Override
-  protected AutoCloseableIterator<JsonNode> queryTableFullRefresh(final BigQueryDatabase database,
+  protected AutoCloseableIterator<JsonNode> queryTableFullRefresh(final BigQueryStorageDatabase database,
                                                                   final List<String> columnNames,
                                                                   final String schemaName,
                                                                   final String tableName,
                                                                   final SyncMode syncMode,
                                                                   final Optional<String> cursorField) {
     LOGGER.info("Queueing query for table: {}", tableName);
-    return queryStorageApi(schemaName, tableName, "", columnNames);
+    return queryStorageApi(database, schemaName, tableName, "", columnNames);
   }
 
   @Override
@@ -182,7 +184,8 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
     return true;
   }
 
-  private AutoCloseableIterator<JsonNode> queryStorageApi(final String schemaName,
+  private AutoCloseableIterator<JsonNode> queryStorageApi(final BigQueryStorageDatabase database,
+                                                          final String schemaName,
                                                           final String tableName,
                                                           final String filter,
                                                           final List<String> columnNames) {
@@ -196,7 +199,7 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
     return AutoCloseableIterators.lazyIterator(() -> {
       try {
         return BigQueryStorageIterator.create(
-            null, // TODO: client
+            database.makeStorageReadClient(),
             tableSpec,
             filter,
             columnNames,
@@ -208,7 +211,7 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
     }, airbyteStream);
   }
 
-  private AutoCloseableIterator<JsonNode> queryTableWithParams(final BigQueryDatabase database,
+  private AutoCloseableIterator<JsonNode> queryTableWithParams(final BigQueryStorageDatabase database,
                                                                final String sqlQuery,
                                                                final String schemaName,
                                                                final String tableName,
