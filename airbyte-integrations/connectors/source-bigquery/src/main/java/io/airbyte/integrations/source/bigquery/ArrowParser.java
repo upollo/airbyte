@@ -128,7 +128,7 @@ class ArrowParser implements AutoCloseable {
 
         @Override public JsonNode next() {
             checkValid();
-            return rowToJson(root, i);
+            return rowToJson(root, i++);
         }
 
         public void invalidate() {
