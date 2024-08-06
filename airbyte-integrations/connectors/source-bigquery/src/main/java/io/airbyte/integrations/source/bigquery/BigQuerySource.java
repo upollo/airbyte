@@ -155,6 +155,20 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
     return QUOTE;
   }
 
+  private static String toCursorLiteral(StandardSQLTypeName type, String value) {
+    // Most cursor types are currently unsupported, given:
+    // a) We aim to generate SQL injection-proof literals and that is a dangerous task.
+    // b) We would need to test more examples to know the exact format expect values in.
+    switch (type) {
+      case StandardSQLTypeName.INT64:
+        return String.format("%d", Long.parseLong(value));
+      case StandardSQLTypeName.TIMESTAMP:
+        return String.format("timestamp_micros(%d)", Long.parseLong(value));
+      default:
+        throw new RuntimeException("Unsupported Bigquery Storage cursor type: " + type + " value: " + value);
+    }
+  }
+
   @Override
   public AutoCloseableIterator<JsonNode> queryTableIncremental(final BigQueryStorageDatabase database,
                                                                final List<String> columnNames,
@@ -164,7 +178,10 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
                                                                final StandardSQLTypeName cursorFieldType) {
     // TODO: Handle more filter types.
     // sourceOperations.getQueryParameter(cursorFieldType, cursorInfo.getCursor());
-    String filter = String.format("%s > %s", cursorInfo.getCursorField(), cursorInfo.getCursor());
+    LOGGER.info("Incremental from cursor type: {} value: {}", cursorFieldType, cursorInfo.getCursor());
+    String cursorLiteral = toCursorLiteral(cursorFieldType, cursorInfo.getCursor());
+    String filter = String.format("%s > %s", cursorInfo.getCursorField(), cursorLiteral);
+    LOGGER.info("Incremental with filter: {}", filter);
     return queryStorageApi(database, schemaName, tableName, filter, columnNames);
   }
 

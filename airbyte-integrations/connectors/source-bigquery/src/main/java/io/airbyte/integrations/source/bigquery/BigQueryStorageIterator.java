@@ -67,6 +67,7 @@ class BigQueryStorageIterator implements AutoCloseableIterator<JsonNode> {
 
     private final ArrowParser parser;
     private final ServerStream<ReadRowsResponse> stream;
+    private final Iterator<ReadRowsResponse> streamIt;
 
     private Iterator<JsonNode> currentBatch;
     private boolean isClosed = false;
@@ -78,15 +79,14 @@ class BigQueryStorageIterator implements AutoCloseableIterator<JsonNode> {
     ) throws IOException {
         this.parser = parser;
         this.stream = stream;
-
+        this.streamIt = stream.iterator();
         this.currentBatch = loadNextBatch();
     }
 
     /** Loads and returns the next batch of records, or none remain. */
     private Iterator<JsonNode> loadNextBatch() throws IOException {
-        Iterator<ReadRowsResponse> it = stream.iterator();
-        if (it.hasNext()) {
-            return parser.processRows(it.next().getArrowRecordBatch());
+        if (!isClosed && streamIt.hasNext()) {
+            return parser.processRows(streamIt.next().getArrowRecordBatch());
         } else {
             return null;
         }
