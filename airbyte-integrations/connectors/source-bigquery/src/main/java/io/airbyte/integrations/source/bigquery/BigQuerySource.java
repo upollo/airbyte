@@ -208,14 +208,20 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
   private AutoCloseableIterator<JsonNode> queryStorageApi(final BigQueryStorageDatabase database,
                                                           final String schemaName,
                                                           final String tableName,
-                                                          final String filter,
+                                                          final String queryFilter,
                                                           final List<String> columnNames) {
+    final String filter = prepareFilter(schemaName, tableName, queryFilter);
+    if (!filter.isEmpty()) {
+      LOGGER.info("Final filter for query of {}.{}: {}", schemaName, tableName, filter);
+    }
+
     String tableSpec = String.format(
         "projects/%s/datasets/%s/tables/%s",
         dbConfig.get(CONFIG_PROJECT_ID).asText(),
         schemaName,
         tableName
     );
+
     final AirbyteStreamNameNamespacePair airbyteStream = AirbyteStreamUtils.convertFromNameAndNamespace(tableName, schemaName);
     return AutoCloseableIterators.lazyIterator(() -> {
       try {
@@ -239,6 +245,19 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
 
   private String getConfigDatasetId(final SqlDatabase database) {
     return (isDatasetConfigured(database) ? database.getSourceConfig().get(CONFIG_DATASET_ID).asText() : "");
+  }
+
+  private String prepareFilter(String schemaName, String tableName, String queryFilter) {
+    final String tableFilter = parseTableFilters(dbConfig.get(CONFIG_TABLE_FILTERS))
+        .get(String.format("%s.%s", schemaName, tableName));
+    if (tableFilter == null || tableFilter.isEmpty()) {
+      return queryFilter;
+    }
+    LOGGER.info("Applying table filter to query: {}", tableFilter);
+    if (queryFilter.isEmpty()) {
+      return tableFilter;
+    }
+    return String.format("(%s) AND (%s)", tableFilter, queryFilter);
   }
 
   static Map<String, String> parseTableFilters(JsonNode tableFilters) {
