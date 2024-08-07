@@ -51,6 +51,7 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
   public static final String CONFIG_DATASET_ID = "dataset_id";
   public static final String CONFIG_PROJECT_ID = "project_id";
   public static final String CONFIG_CREDS = "credentials_json";
+  public static final String CONFIG_TABLE_FILTERS = "table_filters";
 
   private JsonNode dbConfig;
   private final BigQuerySourceOperations sourceOperations = new BigQuerySourceOperations();
@@ -66,6 +67,9 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
         .put(CONFIG_CREDS, config.get(CONFIG_CREDS).asText());
     if (config.hasNonNull(CONFIG_DATASET_ID)) {
       conf.put(CONFIG_DATASET_ID, config.get(CONFIG_DATASET_ID).asText());
+    }
+    if (config.hasNonNull(CONFIG_TABLE_FILTERS)) {
+      conf.put(CONFIG_TABLE_FILTERS, config.get(CONFIG_TABLE_FILTERS));
     }
     return Jsons.jsonNode(conf.build());
   }
@@ -235,6 +239,18 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
 
   private String getConfigDatasetId(final SqlDatabase database) {
     return (isDatasetConfigured(database) ? database.getSourceConfig().get(CONFIG_DATASET_ID).asText() : "");
+  }
+
+  static Map<String, String> parseTableFilters(JsonNode tableFilters) {
+    if (tableFilters == null) {
+      return ImmutableMap.<String, String>of();
+    }
+    final ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
+    for (JsonNode n : tableFilters) {
+      var split = n.asText().split("=");
+      builder.put(split[0], split[1]);
+    }
+    return builder.build();
   }
 
   public static void main(final String[] args) throws Exception {

@@ -23,6 +23,11 @@
         "description": "The contents of your Service Account Key JSON file. See the <a href=\"https://docs.airbyte.com/integrations/sources/bigquery#setup-the-bigquery-source-in-airbyte\">docs</a> for more information on how to obtain this key.",
         "title": "Credentials JSON",
         "airbyte_secret": true
+      },
+      "table_filters": {
+        "type": "stringArray",
+        "description": "Static filters to apply to specific tables within this source, in the format `dataset.table=filter`",
+        "title": "Table Filters"
       }
     }
   }

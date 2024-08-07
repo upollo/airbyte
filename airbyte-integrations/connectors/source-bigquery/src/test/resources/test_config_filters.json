@@ -1,0 +1,8 @@
+{
+  "project_id": "project",
+  "credentials_json": "credentials",
+  "table_filters": [
+    "prod.table_one=last_updated > \"2024-01-01\"",
+    "dev.table_one=last_updated > \"2024-07-01\""
+  ]
+}
