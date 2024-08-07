@@ -228,22 +228,6 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
     }, airbyteStream);
   }
 
-  private AutoCloseableIterator<JsonNode> queryTableWithParams(final BigQueryStorageDatabase database,
-                                                               final String sqlQuery,
-                                                               final String schemaName,
-                                                               final String tableName,
-                                                               final QueryParameterValue... params) {
-    final AirbyteStreamNameNamespacePair airbyteStream = AirbyteStreamUtils.convertFromNameAndNamespace(tableName, schemaName);
-    return AutoCloseableIterators.lazyIterator(() -> {
-      try {
-        final Stream<JsonNode> stream = database.query(sqlQuery, params);
-        return AutoCloseableIterators.fromStream(stream, airbyteStream);
-      } catch (final Exception e) {
-        throw new RuntimeException(e);
-      }
-    }, airbyteStream);
-  }
-
   private boolean isDatasetConfigured(final SqlDatabase database) {
     final JsonNode config = database.getSourceConfig();
     return config.hasNonNull(CONFIG_DATASET_ID) ? !config.get(CONFIG_DATASET_ID).asText().isEmpty() : false;
