@@ -266,7 +266,7 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
     }
     final ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
     for (JsonNode n : tableFilters) {
-      var split = n.asText().split("=");
+      var split = n.asText().split("=", 2);
       builder.put(split[0], split[1]);
     }
     return builder.build();

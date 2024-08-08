@@ -25,7 +25,10 @@
         "airbyte_secret": true
       },
       "table_filters": {
-        "type": "stringArray",
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
         "description": "Static filters to apply to specific tables within this source, in the format `dataset.table=filter`",
         "title": "Table Filters"
       }

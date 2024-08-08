@@ -65,8 +65,8 @@ class BigQuerySourceTest {
     final JsonNode dbConfig = new BigQuerySource().toDatabaseConfig(configJson);
 
     Map<String, String> expectedFilters = ImmutableMap.of(
-        "prod.table_one", "last_updated > \"2024-01-01\"",
-        "dev.table_one", "last_updated > \"2024-07-01\"");
+        "prod.table_one", "last_updated >= \"2024-01-01\"",
+        "dev.table_one", "last_updated >= \"2024-07-01\"");
     assertEquals(expectedFilters,
         BigQuerySource.parseTableFilters(dbConfig.get(BigQuerySource.CONFIG_TABLE_FILTERS)));
   }
