@@ -56,6 +56,14 @@ class BigQueryStorageIterator implements AutoCloseableIterator<JsonNode> {
         }
 
         ReadSession session = client.createReadSession(req.build());
+
+        // A bunch of documentation claims a ReadSession has "one or more streams", and
+        // that "At least one stream is created". This appears to be untrue if you have a
+        // sufficiently restrictive row restriction filter that no rows match.
+        if (session.getStreamsCount() == 0) {
+            return new EmptyIterator<JsonNode>();
+        }
+
         ServerStream<ReadRowsResponse> stream = client.readRowsCallable().call(
             ReadRowsRequest.newBuilder()
                 .setReadStream(session.getStreams(0).getName())
@@ -120,5 +128,11 @@ class BigQueryStorageIterator implements AutoCloseableIterator<JsonNode> {
             isClosed = true;
             currentBatch = null;
         }
+    }
+
+    private static class EmptyIterator<T> implements AutoCloseableIterator<T> {
+        @Override public boolean hasNext() { return false; }
+        @Override public T next() { throw new NoSuchElementException("EmptyIterator"); }
+        @Override public void close() {}
     }
 }
