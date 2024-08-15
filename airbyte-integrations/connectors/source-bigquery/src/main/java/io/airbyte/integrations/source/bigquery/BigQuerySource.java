@@ -51,6 +51,7 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
   public static final String CONFIG_DATASET_ID = "dataset_id";
   public static final String CONFIG_PROJECT_ID = "project_id";
   public static final String CONFIG_CREDS = "credentials_json";
+  public static final String CONFIG_TABLE_FILTERS = "table_filters";
 
   private JsonNode dbConfig;
   private final BigQuerySourceOperations sourceOperations = new BigQuerySourceOperations();
@@ -66,6 +67,9 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
         .put(CONFIG_CREDS, config.get(CONFIG_CREDS).asText());
     if (config.hasNonNull(CONFIG_DATASET_ID)) {
       conf.put(CONFIG_DATASET_ID, config.get(CONFIG_DATASET_ID).asText());
+    }
+    if (config.hasNonNull(CONFIG_TABLE_FILTERS)) {
+      conf.put(CONFIG_TABLE_FILTERS, config.get(CONFIG_TABLE_FILTERS));
     }
     return Jsons.jsonNode(conf.build());
   }
@@ -204,14 +208,20 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
   private AutoCloseableIterator<JsonNode> queryStorageApi(final BigQueryStorageDatabase database,
                                                           final String schemaName,
                                                           final String tableName,
-                                                          final String filter,
+                                                          final String queryFilter,
                                                           final List<String> columnNames) {
+    final String filter = prepareFilter(schemaName, tableName, queryFilter);
+    if (!filter.isEmpty()) {
+      LOGGER.info("Final filter for query of {}.{}: {}", schemaName, tableName, filter);
+    }
+
     String tableSpec = String.format(
         "projects/%s/datasets/%s/tables/%s",
         dbConfig.get(CONFIG_PROJECT_ID).asText(),
         schemaName,
         tableName
     );
+
     final AirbyteStreamNameNamespacePair airbyteStream = AirbyteStreamUtils.convertFromNameAndNamespace(tableName, schemaName);
     return AutoCloseableIterators.lazyIterator(() -> {
       try {
@@ -228,22 +238,6 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
     }, airbyteStream);
   }
 
-  private AutoCloseableIterator<JsonNode> queryTableWithParams(final BigQueryStorageDatabase database,
-                                                               final String sqlQuery,
-                                                               final String schemaName,
-                                                               final String tableName,
-                                                               final QueryParameterValue... params) {
-    final AirbyteStreamNameNamespacePair airbyteStream = AirbyteStreamUtils.convertFromNameAndNamespace(tableName, schemaName);
-    return AutoCloseableIterators.lazyIterator(() -> {
-      try {
-        final Stream<JsonNode> stream = database.query(sqlQuery, params);
-        return AutoCloseableIterators.fromStream(stream, airbyteStream);
-      } catch (final Exception e) {
-        throw new RuntimeException(e);
-      }
-    }, airbyteStream);
-  }
-
   private boolean isDatasetConfigured(final SqlDatabase database) {
     final JsonNode config = database.getSourceConfig();
     return config.hasNonNull(CONFIG_DATASET_ID) ? !config.get(CONFIG_DATASET_ID).asText().isEmpty() : false;
@@ -251,6 +245,31 @@ public class BigQuerySource extends AbstractDbSource<StandardSQLTypeName, BigQue
 
   private String getConfigDatasetId(final SqlDatabase database) {
     return (isDatasetConfigured(database) ? database.getSourceConfig().get(CONFIG_DATASET_ID).asText() : "");
+  }
+
+  private String prepareFilter(String schemaName, String tableName, String queryFilter) {
+    final String tableFilter = parseTableFilters(dbConfig.get(CONFIG_TABLE_FILTERS))
+        .get(String.format("%s.%s", schemaName, tableName));
+    if (tableFilter == null || tableFilter.isEmpty()) {
+      return queryFilter;
+    }
+    LOGGER.info("Applying table filter to query: {}", tableFilter);
+    if (queryFilter.isEmpty()) {
+      return tableFilter;
+    }
+    return String.format("(%s) AND (%s)", tableFilter, queryFilter);
+  }
+
+  static Map<String, String> parseTableFilters(JsonNode tableFilters) {
+    if (tableFilters == null) {
+      return ImmutableMap.<String, String>of();
+    }
+    final ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
+    for (JsonNode n : tableFilters) {
+      var split = n.asText().split("=", 2);
+      builder.put(split[0], split[1]);
+    }
+    return builder.build();
   }
 
   public static void main(final String[] args) throws Exception {
